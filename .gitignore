@@ -1,12 +1,36 @@
-/.vscode
-/raw_data/*
-/visualized_data/*
-/libcity/tmp/*
-/libcity/cache/*
-/libcity/__pycache__
-/libcity/*/__pycache__
-/libcity/data/dataset/__pycache__
-/.idea
-/libcity/log/*
-/libcity/model/*/__pycache__
-/libcity/data/dataset/*/__pycache__
+# LibCity runtime artifacts
+libcity/cache/
+libcity/log/
+runs/
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.log
+
+# Large artifact dirs / local Zenodo unpack (not in git)
+artifacts/expected_layout/
+# keep docs under artifacts/; ignore only the layout unpack dir contents if present
+zenodo-bundle/
+sparcity_cache
+sparsity_analysis
+_baselines
+raw_data
+output/
+vehicular_results_table.csv
+# local checkpoint copies for smoke tests
+libcity/cache/**/*.m
+libcity/cache/**/*.tar
+
+# IDE / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Checkpoints and predictions copied locally for dev
+*.m
+*.tar
+*.npz
+!masks/**/*.json

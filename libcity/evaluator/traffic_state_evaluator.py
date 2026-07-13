@@ -2,10 +2,13 @@ import os
 import json
 import datetime
 import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
 from libcity.utils import ensure_dir
 from libcity.model import loss
 from logging import getLogger
 from libcity.evaluator.abstract_evaluator import AbstractEvaluator
+import torch
 
 
 class TrafficStateEvaluator(AbstractEvaluator):
@@ -15,14 +18,27 @@ class TrafficStateEvaluator(AbstractEvaluator):
         self.allowed_metrics = ['MAE', 'MSE', 'RMSE', 'MAPE', 'masked_MAE', 'masked_MSE', 'masked_RMSE', 'masked_MAPE',
                                 'R2', 'EVAR']
         self.save_modes = config.get('save_mode', ['csv', 'json'])
+        if not isinstance(self.save_modes, list):
+            self.save_modes = [self.save_modes]
         self.mode = config.get('evaluator_mode', 'single')  # or average
         self.mask_val = config.get('mask_val', None)
+        
+        # Z-score normalization configuration
+        self.normalize_metrics = config.get('normalize_metrics', False)
+        self.normalization_method = config.get('normalization_method', 'z_score')
+        self.normalization_stats = {}  # Store mean and std for z-score normalization
+        
         self.config = config
         self.len_timeslots = 0
         self.result = {}  # 每一种指标的结果
         self.intermediate_result = {}  # 每一种指标每一个batch的结果
+        self.visualization_path = config.get('visualization_path', './visualization')
+        ensure_dir(self.visualization_path)
         self._check_config()
         self._logger = getLogger()
+        
+        if self.normalize_metrics:
+            self._logger.info(f'Metrics will be calculated on {self.normalization_method} normalized values')
 
     def _check_config(self):
         if not isinstance(self.metrics, list):
@@ -30,10 +46,131 @@ class TrafficStateEvaluator(AbstractEvaluator):
         for metric in self.metrics:
             if metric not in self.allowed_metrics:
                 raise ValueError('the metric {} is not allowed in TrafficStateEvaluator'.format(str(metric)))
+        
+        if self.normalize_metrics and self.normalization_method not in ['z_score']:
+            raise ValueError(f'Normalization method {self.normalization_method} is not supported. Use "z_score".')
+
+    def _z_score_normalize(self, data, feature_dim=None):
+        """
+        Apply z-score normalization to the data
+        
+        Args:
+            data (torch.Tensor): Input data to normalize
+            feature_dim (int): Feature dimension to normalize along (default: last dimension)
+            
+        Returns:
+            torch.Tensor: Normalized data
+        """
+        if feature_dim is None:
+            feature_dim = data.dim() - 1  # Last dimension by default
+            
+        # Calculate mean and std along the feature dimension
+        if feature_dim == data.dim() - 1:
+            # Normalize along the last dimension (features)
+            mean = data.mean(dim=tuple(range(data.dim() - 1)), keepdim=True)
+            std = data.std(dim=tuple(range(data.dim() - 1)), keepdim=True)
+        else:
+            # Normalize along specified dimension
+            dims = list(range(data.dim()))
+            dims.remove(feature_dim)
+            mean = data.mean(dim=dims, keepdim=True)
+            std = data.std(dim=dims, keepdim=True)
+        
+        # Avoid division by zero
+        std = torch.where(std == 0, torch.ones_like(std), std)
+        
+        # Store normalization stats for potential use
+        if not self.normalization_stats:
+            self.normalization_stats = {
+                'mean': mean.detach().clone(),
+                'std': std.detach().clone()
+            }
+        
+        # Apply z-score normalization
+        normalized_data = (data - mean) / std
+        
+        return normalized_data
+
+    def _normalize_data(self, y_true, y_pred):
+        """
+        Normalize the data based on the configured normalization method
+        
+        Args:
+            y_true (torch.Tensor): Ground truth data
+            y_pred (torch.Tensor): Predicted data
+            
+        Returns:
+            tuple: (normalized_y_true, normalized_y_pred)
+        """
+        if not self.normalize_metrics:
+            return y_true, y_pred
+            
+        if self.normalization_method == 'z_score':
+            # Apply z-score normalization to both y_true and y_pred
+            # We normalize based on the combined data to ensure consistent scaling
+            combined_data = torch.cat([y_true, y_pred], dim=0)
+            normalized_combined = self._z_score_normalize(combined_data)
+            
+            # Split back into y_true and y_pred
+            split_point = y_true.shape[0]
+            normalized_y_true = normalized_combined[:split_point]
+            normalized_y_pred = normalized_combined[split_point:]
+            
+            return normalized_y_true, normalized_y_pred
+        else:
+            return y_true, y_pred
+
+    def get_normalization_stats(self):
+        """
+        Get the normalization statistics (mean and std) used for z-score normalization
+        
+        Returns:
+            dict: Dictionary containing 'mean' and 'std' tensors, or empty dict if not normalized
+        """
+        return self.normalization_stats.copy() if self.normalization_stats else {}
+
+    def visualize_prediction(self, batch):
+        """
+        Visualize prediction vs ground truth for a random sample from the batch
+        
+        Args:
+            batch(dict): Input data containing y_true and y_pred
+        """
+        y_true = batch['y_true']  # tensor
+        y_pred = batch['y_pred']  # tensor
+        
+        # Randomly select one sample from the batch
+        batch_size = y_true.shape[0]
+        random_idx = torch.randint(0, batch_size, (1,)).item()
+        sample_true = y_true[random_idx].cpu().numpy()
+        sample_pred = y_pred[random_idx].cpu().numpy()
+        
+        # Create visualization
+        plt.figure(figsize=(12, 6))
+        time_steps = range(sample_true.shape[0])
+        
+        # Plot for each feature dimension
+        for dim in range(sample_true.shape[-1]):
+            plt.subplot(sample_true.shape[-1], 1, dim + 1)
+            plt.plot(time_steps, sample_true[:, 0, dim], 'b-', label='Ground Truth')
+            plt.plot(time_steps, sample_pred[:, 0, dim], 'r--', label='Prediction')
+            plt.legend()
+            plt.title(f'Feature Dimension {dim}')
+            plt.grid(True)
+        
+        plt.tight_layout()
+        
+        # Save the plot
+        timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+        save_path = os.path.join(self.visualization_path, f'prediction_viz_{timestamp}.png')
+        plt.savefig(save_path)
+        plt.close()
+        
+        self._logger.info(f'Visualization saved to {save_path}')
 
     def collect(self, batch):
         """
-        收集一 batch 的评估输入
+        收集一 batch 的评估输入，随机选择一个样本进行评估
 
         Args:
             batch(dict): 输入数据，字典类型，包含两个Key:(y_true, y_pred):
@@ -46,6 +183,16 @@ class TrafficStateEvaluator(AbstractEvaluator):
         y_pred = batch['y_pred']  # tensor
         if y_true.shape != y_pred.shape:
             raise ValueError("batch['y_true'].shape is not equal to batch['y_pred'].shape")
+        
+        # Apply normalization if configured
+        y_true, y_pred = self._normalize_data(y_true, y_pred)
+        
+        # # Randomly select one sample from the batch
+        # batch_size = y_true.shape[0]
+        # random_idx = torch.randint(0, batch_size, (1,)).item()
+        # y_true = y_true[random_idx:random_idx+1]  # Keep dimension with size 1
+        # y_pred = y_pred[random_idx:random_idx+1]
+        
         self.len_timeslots = y_true.shape[1]
         for i in range(1, self.len_timeslots + 1):
             for metric in self.metrics:
@@ -83,11 +230,13 @@ class TrafficStateEvaluator(AbstractEvaluator):
                         self.intermediate_result[metric + '@' + str(i)].append(
                             loss.masked_mape_torch(y_pred[:, :i], y_true[:, :i]).item())
                     elif metric == 'R2':
+                        r2_result = loss.r2_score_torch(y_pred[:, :i], y_true[:, :i])
                         self.intermediate_result[metric + '@' + str(i)].append(
-                            loss.r2_score_torch(y_pred[:, :i], y_true[:, :i]).item())
+                            r2_result.item() if hasattr(r2_result, 'item') else float(r2_result))
                     elif metric == 'EVAR':
+                        evar_result = loss.explained_variance_score_torch(y_pred[:, :i], y_true[:, :i])
                         self.intermediate_result[metric + '@' + str(i)].append(
-                            loss.explained_variance_score_torch(y_pred[:, :i], y_true[:, :i]).item())
+                            evar_result.item() if hasattr(evar_result, 'item') else float(evar_result))
         elif self.mode.lower() == 'single':  # 第i个时间步的loss
             for i in range(1, self.len_timeslots + 1):
                 for metric in self.metrics:
@@ -120,13 +269,18 @@ class TrafficStateEvaluator(AbstractEvaluator):
                         self.intermediate_result[metric + '@' + str(i)].append(
                             loss.masked_mape_torch(y_pred[:, i - 1], y_true[:, i - 1]).item())
                     elif metric == 'R2':
+                        r2_result = loss.r2_score_torch(y_pred[:, i - 1], y_true[:, i - 1])
                         self.intermediate_result[metric + '@' + str(i)].append(
-                            loss.r2_score_torch(y_pred[:, i - 1], y_true[:, i - 1]).item())
+                            r2_result.item() if hasattr(r2_result, 'item') else float(r2_result))
                     elif metric == 'EVAR':
+                        evar_result = loss.explained_variance_score_torch(y_pred[:, i - 1], y_true[:, i - 1])
                         self.intermediate_result[metric + '@' + str(i)].append(
-                            loss.explained_variance_score_torch(y_pred[:, i - 1], y_true[:, i - 1]).item())
+                            evar_result.item() if hasattr(evar_result, 'item') else float(evar_result))
+                        
         else:
             raise ValueError('Error parameter evaluator_mode={}, please set `single` or `average`.'.format(self.mode))
+
+        self.visualize_prediction(batch)
 
     def evaluate(self):
         """
@@ -160,18 +314,19 @@ class TrafficStateEvaluator(AbstractEvaluator):
             self._logger.info('Evaluate result is saved at ' +
                               os.path.join(save_path, '{}.json'.format(filename)))
 
-        dataframe = {}
         if 'csv' in self.save_modes:
+            dataframe = {}
             for metric in self.metrics:
                 dataframe[metric] = []
             for i in range(1, self.len_timeslots + 1):
                 for metric in self.metrics:
                     dataframe[metric].append(self.result[metric + '@' + str(i)])
-            dataframe = pd.DataFrame(dataframe, index=range(1, self.len_timeslots + 1))
-            dataframe.to_csv(os.path.join(save_path, '{}.csv'.format(filename)), index=False)
-            self._logger.info('Evaluate result is saved at ' +
-                              os.path.join(save_path, '{}.csv'.format(filename)))
-            self._logger.info("\n" + str(dataframe))
+            
+            # Convert to DataFrame and save
+            df = pd.DataFrame(dataframe)
+            csv_path = os.path.join(save_path, '{}.csv'.format(filename))
+            df.to_csv(csv_path, index=False)
+            self._logger.info('Evaluate result is saved at ' + csv_path)
         return dataframe
 
     def clear(self):
@@ -180,3 +335,6 @@ class TrafficStateEvaluator(AbstractEvaluator):
         """
         self.result = {}
         self.intermediate_result = {}
+        # Reset normalization stats when clearing
+        if self.normalize_metrics:
+            self.normalization_stats = {}

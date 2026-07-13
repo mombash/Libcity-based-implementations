@@ -27,9 +27,27 @@ if __name__ == '__main__':
     parser.add_argument('--seed', type=int, default=0, help='random seed')
     # 增加其他可选的参数
     add_general_args(parser)
-    # 解析参数
-    args = parser.parse_args()
+    # 解析参数 - 使用 parse_known_args 以允许未知参数（如 input_window, output_window）
+    args, unknown_args = parser.parse_known_args()
     dict_args = vars(args)
+    # 处理未知参数（格式: --key value）
+    for i in range(0, len(unknown_args), 2):
+        if i + 1 < len(unknown_args):
+            key = unknown_args[i].lstrip('--')
+            value = unknown_args[i + 1]
+            # 尝试转换为 int 或 float，否则保持为字符串
+            try:
+                if '.' in value:
+                    dict_args[key] = float(value)
+                else:
+                    dict_args[key] = int(value)
+            except ValueError:
+                # 尝试布尔值（使用 str2bool 函数保持一致性）
+                try:
+                    dict_args[key] = str2bool(value)
+                except (ValueError, argparse.ArgumentTypeError):
+                    # 不是布尔值，保持为字符串
+                    dict_args[key] = value
     other_args = {key: val for key, val in dict_args.items() if key not in [
         'task', 'model', 'dataset', 'config_file', 'saved_model', 'train'] and
         val is not None}

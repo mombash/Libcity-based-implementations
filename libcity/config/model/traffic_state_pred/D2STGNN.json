@@ -7,6 +7,7 @@
     "output_hidden": 512,
     "k_s": 2,
     "k_t": 3,
+    "use_sliding_window": false,
     "num_layers": 5,
     "time_emd_dim": 10,
     "gap": 3,

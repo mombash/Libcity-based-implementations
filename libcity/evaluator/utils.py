@@ -120,9 +120,11 @@ def evaluate_model(y_pred, y_true, metrics, mode='single', path='metrics.csv'):
                 elif metric == 'MAPE':
                     line[metric] = masked_mape_torch(y_pred[:, i - 1], y_true[:, i - 1]).item()
                 elif metric == 'R2':
-                    line[metric] = r2_score_torch(y_pred[:, i - 1], y_true[:, i - 1]).item()
+                    r2_result = r2_score_torch(y_pred[:, i - 1], y_true[:, i - 1])
+                    line[metric] = r2_result.item() if hasattr(r2_result, 'item') else float(r2_result)
                 elif metric == 'EVAR':
-                    line[metric] = explained_variance_score_torch(y_pred[:, i - 1], y_true[:, i - 1]).item()
+                    evar_result = explained_variance_score_torch(y_pred[:, i - 1], y_true[:, i - 1])
+                    line[metric] = evar_result.item() if hasattr(evar_result, 'item') else float(evar_result)
                 else:
                     raise ValueError('Error parameter mode={}, please set `single` or `average`.'.format(mode))
             elif mode.lower() == 'average':
@@ -143,9 +145,11 @@ def evaluate_model(y_pred, y_true, metrics, mode='single', path='metrics.csv'):
                 elif metric == 'MAPE':
                     line[metric] = masked_mape_torch(y_pred[:, :i], y_true[:, :i]).item()
                 elif metric == 'R2':
-                    line[metric] = r2_score_torch(y_pred[:, :i], y_true[:, :i]).item()
+                    r2_result = r2_score_torch(y_pred[:, :i], y_true[:, :i])
+                    line[metric] = r2_result.item() if hasattr(r2_result, 'item') else float(r2_result)
                 elif metric == 'EVAR':
-                    line[metric] = explained_variance_score_torch(y_pred[:, :i], y_true[:, :i]).item()
+                    evar_result = explained_variance_score_torch(y_pred[:, :i], y_true[:, :i])
+                    line[metric] = evar_result.item() if hasattr(evar_result, 'item') else float(evar_result)
                 else:
                     raise ValueError('Error parameter metric={}!'.format(metric))
             else:

@@ -27,5 +27,6 @@
   "lr_decay": false,
   "clip_grad_norm": true,
   "max_grad_norm": 5,
-  "use_early_stop": false
+  "use_early_stop": false,
+  "use_sliding_window": false
 }

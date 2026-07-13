@@ -35,6 +35,10 @@ class TrafficStateDataset(AbstractDataset):
         self.add_day_in_week = self.config.get('add_day_in_week', False)
         self.input_window = self.config.get('input_window', 12)
         self.output_window = self.config.get('output_window', 12)
+        # Sliding window configuration
+        self.use_sliding_window = self.config.get('use_sliding_window', True)
+        # If not sliding, default to non-overlapping by input_window; can be overridden explicitly
+        self.sample_stride = self.config.get('sample_stride', 1 if self.use_sliding_window else self.input_window)
         self.robustness_test = self.config.get('robustness_test', False)
         self.disturb_rate = self.config.get('disturb_rate', 0.5)
         self.noise_type = self.config.get('noise_type', 'none')
@@ -44,7 +48,8 @@ class TrafficStateDataset(AbstractDataset):
             str(self.dataset) + '_' + str(self.input_window) + '_' + str(self.output_window) + '_' \
             + str(self.train_rate) + '_' + str(self.eval_rate) + '_' + str(self.scaler_type) + '_' \
             + str(self.batch_size) + '_' + str(self.load_external) + '_' + str(self.add_time_in_day) + '_' \
-            + str(self.add_day_in_week) + '_' + str(self.pad_with_last_sample)
+            + str(self.add_day_in_week) + '_' + str(self.pad_with_last_sample) + '_' \
+            + str(self.use_sliding_window) + '_' + str(self.sample_stride)
         self.cache_file_name = os.path.join('./libcity/cache/dataset_cache/',
                                             'traffic_state_{}.npz'.format(self.parameters_str))
         self.cache_file_folder = './libcity/cache/dataset_cache/'
@@ -280,7 +285,7 @@ class TrafficStateDataset(AbstractDataset):
         data = []
         for i in range(0, df.shape[0], len_time):
             data.append(df[i:i + len_time].values)
-        data = np.array(data, dtype=np.float)  # (len(self.geo_ids), len_time, feature_dim)
+        data = np.array(data, dtype=np.float64)  # (len(self.geo_ids), len_time, feature_dim)
         data = data.swapaxes(0, 1)  # (len_time, len(self.geo_ids), feature_dim)
         self._logger.info("Loaded file " + filename + '.dyna' + ', shape=' + str(data.shape))
         return data
@@ -326,7 +331,7 @@ class TrafficStateDataset(AbstractDataset):
         data = []
         for i in range(0, df.shape[0], len_time):
             data.append(df[i:i + len_time].values)
-        data = np.array(data, dtype=np.float)  # (len(self.geo_ids), len_time, feature_dim)
+        data = np.array(data, dtype=np.float64)  # (len(self.geo_ids), len_time, feature_dim)
         data = data.swapaxes(0, 1)  # (len_time, len(self.geo_ids), feature_dim)
         self._logger.info("Loaded file " + filename + '.grid' + ', shape=' + str(data.shape))
         return data
@@ -376,7 +381,7 @@ class TrafficStateDataset(AbstractDataset):
                 index = (i * self.len_column + j) * len_time
                 tmp.append(df[index:index + len_time].values)
             data.append(tmp)
-        data = np.array(data, dtype=np.float)  # (len_row, len_column, len_time, feature_dim)
+        data = np.array(data, dtype=np.float64)  # (len_row, len_column, len_time, feature_dim)
         data = data.swapaxes(2, 0).swapaxes(1, 2)  # (len_time, len_row, len_column, feature_dim)
         self._logger.info("Loaded file " + filename + '.grid' + ', shape=' + str(data.shape))
         return data
@@ -418,7 +423,7 @@ class TrafficStateDataset(AbstractDataset):
         feature_dim = len(odfile.columns) - 3
         df = odfile[odfile.columns[-feature_dim:]]
         len_time = len(self.timesolts)
-        data = np.zeros((self.num_nodes, self.num_nodes, len_time, feature_dim))
+        data = np.zeros((self.num_nodes, self.num_nodes, len_time, feature_dim), dtype=np.float64)
         for i in range(self.num_nodes):
             origin_index = i * len_time * self.num_nodes  # 每个起点占据len_t*n行
             for j in range(self.num_nodes):
@@ -470,7 +475,7 @@ class TrafficStateDataset(AbstractDataset):
         feature_dim = len(gridodfile.columns) - 5
         df = gridodfile[gridodfile.columns[-feature_dim:]]
         len_time = len(self.timesolts)
-        data = np.zeros((len(self.geo_ids), len(self.geo_ids), len_time, feature_dim))
+        data = np.zeros((len(self.geo_ids), len(self.geo_ids), len_time, feature_dim), dtype=np.float64)
         for oi in range(self.len_row):
             for oj in range(self.len_column):
                 origin_index = (oi * self.len_column + oj) * len_time * len(self.geo_ids)  # 每个起点占据len_t*n行
@@ -527,7 +532,7 @@ class TrafficStateDataset(AbstractDataset):
         feature_dim = len(gridodfile.columns) - 5
         df = gridodfile[gridodfile.columns[-feature_dim:]]
         len_time = len(self.timesolts)
-        data = np.zeros((self.len_row, self.len_column, self.len_row, self.len_column, len_time, feature_dim))
+        data = np.zeros((self.len_row, self.len_column, self.len_row, self.len_column, len_time, feature_dim), dtype=np.float64)
         for oi in range(self.len_row):
             for oj in range(self.len_column):
                 origin_index = (oi * self.len_column + oj) * len_time * len(self.geo_ids)  # 每个起点占据len_t*n行
@@ -758,7 +763,11 @@ class TrafficStateDataset(AbstractDataset):
         x, y = [], []
         min_t = abs(min(x_offsets))
         max_t = abs(num_samples - abs(max(y_offsets)))
-        for t in range(min_t, max_t):
+        # Use configured stride to control sliding vs non-sliding windows
+        stride = int(self.sample_stride) if hasattr(self, 'sample_stride') else 1
+        if stride <= 0:
+            stride = 1
+        for t in range(min_t, max_t, stride):
             x_t = df[t + x_offsets, ...]
             y_t = df[t + y_offsets, ...]
             x.append(x_t)

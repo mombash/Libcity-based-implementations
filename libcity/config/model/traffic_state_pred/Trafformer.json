@@ -12,5 +12,7 @@
   "e_layers": 2,
   "distil": false,
   "mix": true,
-  "d_layers": 1
+  "d_layers": 1,
+  "batch_size": 3,
+  "use_sliding_window": false
 }

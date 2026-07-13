@@ -1,0 +1,23 @@
+{
+  "files": [
+    "multi_seed/PEMSD4/paper_11level/masks_seed43.json",
+    "multi_seed/PEMSD4/paper_11level/masks_seed44.json",
+    "multi_seed/PEMSD4/paper_11level/masks_seed45.json",
+    "multi_seed/PEMSD4/breakdown_8level/masks_seed43.json",
+    "multi_seed/PEMSD4/breakdown_8level/masks_seed44.json",
+    "multi_seed/PEMSD4/breakdown_8level/masks_seed45.json",
+    "multi_seed/PEMSD8/paper_11level/masks_seed43.json",
+    "multi_seed/PEMSD8/paper_11level/masks_seed44.json",
+    "multi_seed/PEMSD8/paper_11level/masks_seed45.json",
+    "multi_seed/PEMSD8/breakdown_8level/masks_seed43.json",
+    "multi_seed/PEMSD8/breakdown_8level/masks_seed44.json",
+    "multi_seed/PEMSD8/breakdown_8level/masks_seed45.json"
+  ],
+  "seeds": [
+    43,
+    44,
+    45
+  ],
+  "existing_seed": 42,
+  "usage": "Re-run eval_sparsity.py with --mask_seed <seed> for each file's meta.mask_seed. Mask node lists match eval_sparsity.masked_nodes_for_rho."
+}
