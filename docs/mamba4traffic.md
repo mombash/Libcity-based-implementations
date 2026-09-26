@@ -17,7 +17,7 @@ These commands train new models under the shared configuration; exact published 
 
 ## Evaluate the released checkpoints
 
-After the Zenodo artifact is public, unpack it with `bash artifacts/download.sh`. For PEMS04:
+Download and unpack the Zenodo artifact with `bash artifacts/download.sh`. For PEMS04:
 
 ```bash
 for seed in 43 44 45; do

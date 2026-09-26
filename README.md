@@ -2,13 +2,17 @@
 
 This repository is the public implementation and reproduction package for *A Sparsity Analysis of Traffic Forecasting Architectures: How Much Missing Data is Too Much?* It contains the LibCity-based implementations, fixed masks, final configurations, checkpoint map, evaluation code, and scripts used for every reported table and figure.
 
-## Release gate
+## Artifact archive
 
-DOI `10.5281/zenodo.21944002` is the reserved record for this paper, but it is currently an unsubmitted draft and is not yet publicly downloadable. The artifact archive has been built and verified locally. This branch must not be released or committed as ready until the record has been published and `artifacts/download.sh` succeeds anonymously.
+The public artifact is available from [Zenodo record 21944002](https://zenodo.org/records/21944002) under DOI `10.5281/zenodo.21944002`. Download, verify, and unpack it with:
+
+```bash
+bash artifacts/download.sh
+```
 
 ## Rebuild the submission
 
-Once the public artifact has been downloaded by `artifacts/download.sh`, run from the repository root:
+After the artifact has been downloaded by `artifacts/download.sh`, run from the repository root:
 
 ```bash
 python reproduce.py manuscript

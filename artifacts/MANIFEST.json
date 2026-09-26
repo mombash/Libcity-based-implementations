@@ -1,7 +1,7 @@
 {
   "version": "1.0.0",
   "doi": "10.5281/zenodo.21944002",
-  "publication_status": "reserved draft; release blocked until public",
+  "publication_status": "public",
   "bundle_file": "sparsity-traffic-forecasting-artifacts.tar.gz",
   "bundle_sha256": "f29e92ac222421e635739efa9662cf4da4ac61346d3d5ab4df6d602b8b52d362",
   "bundle_size_bytes": 51734925,
