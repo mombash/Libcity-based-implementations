@@ -95,6 +95,24 @@ def copy_evaluations(source_root: Path, bundle: Path, manifests: list[Path]) -> 
                 shutil.copy2(source_file, destination_file)
 
 
+def copy_checkpoint_text(source: Path, destination: Path, run: str) -> int:
+    if not run.startswith("Mamba4Traffic_"):
+        shutil.copy2(source, destination)
+        return 0
+    output = []
+    replacements = 0
+    marker = " model configured for device:"
+    for line in source.read_text(encoding="utf-8").splitlines(keepends=True):
+        if " - INFO - " in line and marker in line and "(Full model)" in line:
+            prefix = line.split(" - INFO - ", 1)[0]
+            suffix = line.split(marker, 1)[1]
+            line = f"{prefix} - INFO - Mamba4Traffic model configured for device:{suffix}"
+            replacements += 1
+        output.append(line)
+    destination.write_text("".join(output), encoding="utf-8")
+    return replacements
+
+
 def copy_checkpoints(source_root: Path, bundle: Path) -> None:
     for run in CHECKPOINTS:
         source = source_root / "libcity" / "cache" / run
@@ -106,10 +124,14 @@ def copy_checkpoints(source_root: Path, bundle: Path) -> None:
         (destination / "model_cache").mkdir(parents=True, exist_ok=True)
         (destination / "logs").mkdir(parents=True, exist_ok=True)
         shutil.copy2(weights[0], destination / "model_cache" / weights[0].name)
-        shutil.copy2(logs[0], destination / "logs" / logs[0].name)
+        replacements = copy_checkpoint_text(
+            logs[0], destination / "logs" / logs[0].name, run
+        )
+        if run.startswith("Mamba4Traffic_") and replacements != 1:
+            raise RuntimeError(f"Expected one model identity line in {logs[0]}")
         summary = source / "logs" / "training_summary.txt"
         if summary.is_file():
-            shutil.copy2(summary, destination / "logs" / summary.name)
+            copy_checkpoint_text(summary, destination / "logs" / summary.name, run)
 
 
 def copy_release_inputs(bundle: Path, figures: Path) -> None:

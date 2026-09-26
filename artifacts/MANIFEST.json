@@ -3,10 +3,10 @@
   "doi": "10.5281/zenodo.21944002",
   "publication_status": "reserved draft; release blocked until public",
   "bundle_file": "sparsity-traffic-forecasting-artifacts.tar.gz",
-  "bundle_sha256": "cdbc6293586ffb4fca2006004c7b323aedde5fd037cf00e48151b9800aa8cad4",
-  "bundle_size_bytes": 51734908,
+  "bundle_sha256": "f29e92ac222421e635739efa9662cf4da4ac61346d3d5ab4df6d602b8b52d362",
+  "bundle_size_bytes": 51734925,
   "unpacked_file_count": 383,
-  "unpacked_size_bytes": 59312890,
+  "unpacked_size_bytes": 59312880,
   "mask_seeds": [
     43,
     44,
