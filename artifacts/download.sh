@@ -1,39 +1,28 @@
 #!/usr/bin/env bash
-# Download Zenodo artifact bundle once DOI is published.
-# Usage: ./artifacts/download.sh [DEST_DIR]
-# Set ZENODO_RECORD_ID or edit ZENODO_URL below after deposit.
-
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-DEST="${1:-$REPO_ROOT/artifacts/expected_layout}"
+DEST="${1:-$REPO_ROOT/artifacts}"
+FILE="sparsity-traffic-forecasting-artifacts.tar.gz"
+RECORD="https://zenodo.org/api/records/21944002"
+URL="https://zenodo.org/records/21944002/files/${FILE}?download=1"
+SHA256="cdbc6293586ffb4fca2006004c7b323aedde5fd037cf00e48151b9800aa8cad4"
 
-# Placeholder until Zenodo deposit is published:
-#   Record: https://zenodo.org/records/TBD
-#   DOI:    https://doi.org/10.5281/zenodo.TBD
-ZENODO_RECORD_ID="${ZENODO_RECORD_ID:-TBD}"
-ZENODO_URL="${ZENODO_URL:-https://zenodo.org/records/${ZENODO_RECORD_ID}/files/zenodo-bundle.tar.gz}"
-
-if [[ "$ZENODO_RECORD_ID" == "TBD" ]]; then
-  echo "Zenodo record not configured yet (placeholder)."
-  echo "  Record page: https://zenodo.org/records/TBD"
-  echo "  DOI:         https://doi.org/10.5281/zenodo.TBD"
-  echo ""
-  echo "1. Upload zenodo-bundle.tar.gz to Zenodo"
-  echo "2. Set ZENODO_RECORD_ID (or ZENODO_URL) in this script / env"
-  echo "3. Re-run: ./artifacts/download.sh"
-  echo ""
-  echo "Expected unpack layout: artifacts/expected_layout/README.md"
+if ! curl --fail --silent --show-error "$RECORD" >/dev/null; then
+  echo "Zenodo record 21944002 is not public; this repository is not release-ready." >&2
   exit 1
 fi
-
+if [[ -e "$DEST/paper-release" ]]; then
+  echo "Refusing to overwrite existing $DEST/paper-release" >&2
+  exit 1
+fi
 mkdir -p "$DEST"
-TMP="$(mktemp -d)"
+TMP_ROOT="${TMPDIR:-/tmp}"
+TMP="$(mktemp -d "$TMP_ROOT/sparsity-paper.XXXXXX")"
 trap 'rm -rf "$TMP"' EXIT
-
-echo "Downloading from $ZENODO_URL ..."
-curl -L -o "$TMP/zenodo-bundle.tar.gz" "$ZENODO_URL"
-echo "Extracting to $DEST ..."
-tar -xzf "$TMP/zenodo-bundle.tar.gz" -C "$DEST"
-echo "Done. Verify checksums against artifacts/MANIFEST.json"
+curl --fail --location --output "$TMP/$FILE" "$URL"
+printf '%s  %s
+' "$SHA256" "$TMP/$FILE" | sha256sum --check
+tar -xzf "$TMP/$FILE" -C "$DEST"
+echo "Artifacts unpacked to $DEST/paper-release"

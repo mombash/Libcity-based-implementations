@@ -1,35 +1,27 @@
 {
-  "version": "1.1.0",
-  "zenodo_doi": "https://doi.org/10.5281/zenodo.TBD",
-  "zenodo_record_url": "https://zenodo.org/records/TBD",
-  "zenodo_bundle_tarball": "/data/rschadmin/papers_github/zenodo-bundle.tar.gz",
-  "bundle_file_count": 519,
-  "bundle_total_bytes": 61152492901,
-  "sparsity_checkpoints": [
-    "DCRNN_PEMSD4_20260630_094809",
-    "DCRNN_PEMSD8_20260630_094749",
-    "D2STGNN_PEMSD4_20260623_102537",
-    "D2STGNN_PEMSD8_20251202_210455",
-    "MCSTMambaLST_Ablation_PEMSD4_20260629_174146",
-    "MCSTMambaLST_Ablation_PEMSD8_20260630_094729",
-    "Trafformer_PEMSD4_20260624_071738",
-    "Trafformer_PEMSD8_20260629_060448"
+  "version": "1.0.0",
+  "doi": "10.5281/zenodo.21944002",
+  "publication_status": "reserved draft; release blocked until public",
+  "bundle_file": "sparsity-traffic-forecasting-artifacts.tar.gz",
+  "bundle_sha256": "cdbc6293586ffb4fca2006004c7b323aedde5fd037cf00e48151b9800aa8cad4",
+  "bundle_size_bytes": 51734908,
+  "unpacked_file_count": 383,
+  "unpacked_size_bytes": 59312890,
+  "mask_seeds": [
+    43,
+    44,
+    45
   ],
-  "description": "Zenodo artifact bundle for Sparsity + Mamba4Traffic journal papers",
-  "lineages": {
-    "sparsity_multiseed": {
-      "description": "Jun 23\u201330 2026 retrained checkpoints + Jul 5\u20136 multiseed evals (seeds 43\u201345)",
-      "mask_seeds": [
-        43,
-        44,
-        45
-      ]
-    },
-    "m4t_sept2025": {
-      "description": "Mamba4Traffic paper full-data benchmark (Sept 2025 _baselines exports)",
-      "fallback": "_baselines/ CSV exports when .m checkpoints missing"
-    }
-  },
-  "files_note": "Full file list in zenodo-bundle/MANIFEST.json",
-  "retrain_todo": "See artifacts/RETRAIN_TODO.md"
+  "manuscript_runs": 48,
+  "additional_channel_plot_runs": 3,
+  "checkpoints": [
+    "DCRNN_PEMSD4_20260831_114637",
+    "DCRNN_PEMSD8_20260831_071603",
+    "D2STGNN_PEMSD4_20260816_151002",
+    "D2STGNN_PEMSD8_20260816_150942",
+    "Mamba4Traffic_PEMSD4_20260816_151054",
+    "Mamba4Traffic_PEMSD8_20260816_151048",
+    "Trafformer_PEMSD4_20260921_064833",
+    "Trafformer_PEMSD8_20260817_104712"
+  ]
 }

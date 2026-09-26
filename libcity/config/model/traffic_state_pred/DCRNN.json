@@ -5,6 +5,11 @@
   "max_diffusion_step": 2,
   "num_rnn_layers": 2,
   "rnn_units": 64,
+  "data_col": [
+    "traffic_flow",
+    "traffic_occupancy",
+    "traffic_speed"
+  ],
   "use_curriculum_learning": true,
   "scaler": "standard",
   "load_external": true,
@@ -30,5 +35,6 @@
   "patience": 15,
   "num_workers": 0,
   "pin_memory": false,
-  "prefetch_factor": 2
+  "prefetch_factor": 2,
+  "sample_stride": 1
 }

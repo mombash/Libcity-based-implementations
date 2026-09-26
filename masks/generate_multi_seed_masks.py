@@ -11,11 +11,9 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "masks" / "multi_seed"
 
-EXISTING_SEED = 42
 NEW_SEEDS = [43, 44, 45]
 
-DATASETS = {
-    "PEMSD4": {
+DATASETS = {    "PEMSD4": {
         "num_nodes": 307,
         "grids": {
             "paper_11level": [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
@@ -32,11 +30,10 @@ DATASETS = {
 }
 
 
-def masked_nodes_for_rho(num_nodes: int, sparsity: float, seed_base: int = 42) -> np.ndarray:
+def masked_nodes_for_rho(num_nodes: int, sparsity: float, seed_base: int = 43) -> np.ndarray:
     """Match eval_sparsity.masked_nodes_for_rho exactly."""
     rho = float(sparsity)
-    if rho <= 0.0:
-        return np.array([], dtype=int)
+    if rho <= 0.0:        return np.array([], dtype=int)
     n_zero = int(round(num_nodes * rho))
     n_zero = min(max(n_zero, 0), num_nodes)
     if n_zero == 0:
@@ -59,24 +56,16 @@ def main() -> None:
                     key = f"{rho:.2f}"
                     masks_by_rho[key] = masked_nodes_for_rho(num_nodes, rho, seed_base=seed).tolist()
 
-                ref42 = set(masked_nodes_for_rho(num_nodes, 0.10, seed_base=EXISTING_SEED).tolist())
-                ref_new = set(masks_by_rho["0.10"])
-                if ref42 == ref_new:
-                    raise RuntimeError(f"seed {seed} produced identical rho=0.10 mask as seed {EXISTING_SEED}")
 
                 payload = {
                     "meta": {
                         "dataset": dataset,
                         "num_nodes": num_nodes,
                         "mask_seed": seed,
-                        "baseline_seed": EXISTING_SEED,
                         "sparsity_grid": grid_name,
                         "sparsity_levels": rhos,
                         "sparsity_mode": "sweep",
-                        "notes": (
-                            "Additional random masks for repeated-mask robustness analysis "
-                            "(reviewer R2 comment 5)."
-                        ),
+                        "notes": "Deterministic masks for the reported three-seed analysis.",
                     },
                     "masks_by_rho": masks_by_rho,
                 }
@@ -90,7 +79,6 @@ def main() -> None:
             {
                 "files": manifest,
                 "seeds": NEW_SEEDS,
-                "existing_seed": EXISTING_SEED,
                 "usage": (
                     "Re-run eval_sparsity.py with --mask_seed <seed> for each file's meta.mask_seed. "
                     "Mask node lists match eval_sparsity.masked_nodes_for_rho."

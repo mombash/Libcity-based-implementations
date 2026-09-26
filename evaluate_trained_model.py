@@ -641,9 +641,12 @@ def evaluate_model(task='traffic_state_pred', model_name=None, dataset_name=None
     
     # Adjust model cache paths based on model_dir
     if model_dir:
-        model_cache_dir = os.path.join('./libcity/cache', exp_id, 'model_cache')
-        # Create a new folder for this evaluation run
-        eval_dir = os.path.join('./libcity/cache', exp_id, 'evaluations', eval_run_id)
+        # Respect the supplied directory, including checkpoints unpacked under
+        # artifacts/paper-release, instead of silently redirecting to libcity/cache.
+        resolved_model_dir = os.path.abspath(model_dir)
+        model_cache_dir = os.path.join(resolved_model_dir, 'model_cache')
+        # Keep evaluation outputs beside the checkpoint selected by the caller.
+        eval_dir = os.path.join(resolved_model_dir, 'evaluations', eval_run_id)
         os.makedirs(eval_dir, exist_ok=True)
         print(f"Created evaluation directory: {eval_dir}")
         
@@ -666,25 +669,23 @@ def evaluate_model(task='traffic_state_pred', model_name=None, dataset_name=None
             raise FileNotFoundError(f"Model file not found: {model_path}")
         file_logger.info(f"Using specified epoch {epoch} model: {model_path}")
     else:
-        # No epoch specified - automatically find and use the highest epoch
-        pattern = os.path.join(model_cache_dir, f"{model_name}_{dataset_name}_epoch*.tar")
-        model_files = glob.glob(pattern)
-        
-        if not model_files:
-            # If no epoch files found, try the general model file
-            model_path = os.path.join(model_cache_dir, f"{model_name}_{dataset_name}.m")
-            if not os.path.exists(model_path):
-                raise FileNotFoundError(f"No model files found. Tried pattern: {pattern} and general file: {model_path}")
-            file_logger.info(f"No epoch files found, using general model file: {model_path}")
+        # The general .m file is the best checkpoint saved by the training
+        # pipeline and is the artifact released for the paper. Only fall back
+        # to the highest numbered epoch for older runs without that file.
+        best_model = os.path.join(model_cache_dir, f"{model_name}_{dataset_name}.m")
+        if os.path.exists(best_model):
+            model_path = best_model
+            file_logger.info(f"Using released best model: {model_path}")
         else:
-            # Extract epoch numbers and find the highest
+            pattern = os.path.join(model_cache_dir, f"{model_name}_{dataset_name}_epoch*.tar")
+            model_files = glob.glob(pattern)
+            if not model_files:
+                raise FileNotFoundError(f"No model files found. Tried: {best_model} and {pattern}")
             epochs = [int(f.split('_epoch')[-1].split('.')[0]) for f in model_files]
-            highest_epoch = max(epochs)
-            epoch = highest_epoch  # Set the epoch variable for proper loading
-            model_path = os.path.join(model_cache_dir, f"{model_name}_{dataset_name}_epoch{highest_epoch}.tar")
-            file_logger.info(f"No epoch specified, automatically using highest epoch {highest_epoch}: {model_path}")
-            file_logger.info(f"Available epochs: {sorted(epochs)}")
-    
+            epoch = max(epochs)
+            model_path = os.path.join(model_cache_dir, f"{model_name}_{dataset_name}_epoch{epoch}.tar")
+            file_logger.info(f"No .m artifact found; using highest epoch {epoch}: {model_path}")
+
     # Before initializing the model, try to extract the configuration from the saved model
     file_logger.info(f"Loading model configuration from: {model_path}")
     checkpoint = torch.load(model_path, map_location='cpu')
@@ -706,9 +707,7 @@ def evaluate_model(task='traffic_state_pred', model_name=None, dataset_name=None
     else:
         # No config in checkpoint, try to extract from training logs
         file_logger.info("No configuration found in checkpoint, extracting from training logs")
-        # Construct the full path to the model directory
-        full_model_dir = os.path.join('./libcity/cache', model_dir)
-        training_config = extract_config_from_training_log(full_model_dir, file_logger)
+        training_config = extract_config_from_training_log(resolved_model_dir, file_logger)
         
         if training_config:
             file_logger.info(f"Successfully extracted training configuration with {len(training_config)} parameters")

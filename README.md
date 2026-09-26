@@ -1,84 +1,74 @@
-# Bigscity-LibCity — Sparsity & Mamba4Traffic Papers
+# Sparsity robustness benchmark for traffic forecasting
 
-Reproducible [LibCity](https://github.com/LibCity/Bigscity-LibCity) fork for two journal papers:
+This repository is the public implementation and reproduction package for *A Sparsity Analysis of Traffic Forecasting Architectures: How Much Missing Data is Too Much?* It contains the LibCity-based implementations, fixed masks, final configurations, checkpoint map, evaluation code, and scripts used for every reported table and figure.
 
-- **Sparsity journal** — sensor-masking robustness (DCRNN, D2STGNN, Trafformer, Mamba4Traffic)
-- **Mamba4Traffic journal** — multivariate traffic forecasting on PEMS04/PEMS08
-- **MCST-Mamba** — conference predecessor model (`MCSTMamba`)
+## Release gate
 
-LaTeX sources live in separate repos. Large artifacts (checkpoints, eval caches, predictions, raw data) are distributed via **Zenodo**.
+DOI `10.5281/zenodo.21944002` is the reserved record for this paper, but it is currently an unsubmitted draft and is not yet publicly downloadable. The artifact archive has been built and verified locally. This branch must not be released or committed as ready until the record has been published and `artifacts/download.sh` succeeds anonymously.
 
-## Artifacts (Zenodo)
+## Rebuild the submission
 
-| | Placeholder (replace after deposit) |
-|--|--|
-| Record page | https://zenodo.org/records/TBD |
-| DOI | https://doi.org/10.5281/zenodo.TBD |
-| Bundle file | `zenodo-bundle.tar.gz` (~50+ GB) |
+Once the public artifact has been downloaded by `artifacts/download.sh`, run from the repository root:
 
 ```bash
-# After you set ZENODO_RECORD_ID in artifacts/download.sh:
-./artifacts/download.sh
+python reproduce.py manuscript
+python reproduce.py channel-breakdown
 ```
 
-Until the Zenodo deposit exists, `./artifacts/download.sh` exits with setup instructions.
-See `artifacts/expected_layout/README.md` for the unpack layout.
+The first command rebuilds all three manuscript tables and all eight manuscript figures; outputs go to `reproduced/manuscript/`. The second rebuilds the six public channel-wise breakdown PDFs in `reproduced/channel_breakdown/`.
 
-Checkpoint lineages: `MODEL_MAP.md`, `artifacts/RETRAIN_TODO.md`.
+The regenerated Table I/II/III LaTeX is byte-identical to the submitted source. Direct cache checks are D2STGNN/PEMS04 baseline `vMAE_a = 0.1592339332` (reported `0.159`) and weighted mean degradation `4.8396010232` (reported `4.84x`). Cache-based reproduction needs `numpy`, `pandas`, `matplotlib`, and `seaborn`.
 
-## Environment
+## Reported evaluation protocol
+
+The defaults in `eval_sparsity.py` and `tools/sparsity/job_plan.py` implement the paper path:
+
+- training-split per-channel means and standard deviations only;
+- all 12 forecast horizons;
+- `vMAE_a` as the arithmetic mean of flow, occupancy, and speed vMAE;
+- raw ground-truth zeros retained in reported vehicular metrics;
+- flow--occupancy--speed channel order fixed from configuration;
+- permutation search disabled unless explicitly requested;
+- mask seeds 43, 44, and 45 and `k = round(rho N)`;
+- static random raw-zero fill transformed into model input space;
+- aggregate thresholds 0.33 (PEMS04) and 0.42 (PEMS08);
+- D2STGNN gap 3;
+- P10: 0--100% at 10% steps; P5: 0--35% at 5% steps;
+- Gaussian alpha 20, with alpha 10 and 40 in the sensitivity figure.
+
+The final Trafformer/PEMS04 manuscript checkpoint is `Trafformer_PEMSD4_20260921_064833` with sample stride 1. The default job profile is `standard`. A non-paper raw profile is available only when an external `SPARSITY_RAW_CHECKPOINT_MAP` is supplied.
+
+## Re-run inference
+
+After the artifact is public, place LibCity-format PEMS04/PEMS08 data under `raw_data/`, then run a released checkpoint directly:
 
 ```bash
-conda activate libcity-mamba
-# Or follow mamba_environment_setup.md and requirements.txt
+python eval_sparsity.py \
+  --model_dir artifacts/paper-release/checkpoints/DCRNN_PEMSD4_20260831_114637 \
+  --log_file artifacts/paper-release/checkpoints/DCRNN_PEMSD4_20260831_114637/logs/DCRNN_PEMSD4_20260831_114637-DCRNN-PEMSD4-Aug-31-2026_11-46-37.log \
+  --sparsity 0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0
 ```
 
-Requires Python 3.9, PyTorch 2.0+cu118, mamba-ssm 1.2.2.
+No protocol flags are needed. Pass `--mask_seed 44` or `45` for the other reported masks. Exact training configurations are under `configs/sparsity_retrain/`.
 
-## Training
+## Alternative fill representations
+
+Static random zero-fill remains the reported protocol. The code exposes only two fill representations for future study:
 
 ```bash
-# Sparsity / Mamba4Traffic model
-python run_model.py --task traffic_state_pred --model MCSTMambaLST_Ablation \
-  --dataset PEMSD4 --config_file configs/sparsity_retrain/MCSTMambaLST_Ablation_PEMSD4 \
-  --batch_size 16 --seed 0 --saved_model true --train true
-
-# MCST-Mamba
-python run_model.py --task traffic_state_pred --model MCSTMamba --dataset PEMSD8 \
-  --config_file configs/m4t/MCSTMamba --train true
+python eval_sparsity.py ... --fill_mode last_observation
+python eval_sparsity.py ... --fill_mode training_mean
 ```
 
-## Evaluation
+These switches are extensions; no results for them are reported. Spatially correlated failures, temporally correlated/intermittent failures, and non-zero or stuck faults remain future work rather than released experiment modes.
 
-### Mamba4Traffic (full-data, vehicular metrics)
+## Final checkpoints
 
-```bash
-python evaluate_trained_model.py --model_dir libcity/cache/<run_dir>
-python build_results_table.py
-```
+| Model | PEMS04 | PEMS08 |
+|---|---|---|
+| DCRNN | `DCRNN_PEMSD4_20260831_114637` | `DCRNN_PEMSD8_20260831_071603` |
+| D2STGNN | `D2STGNN_PEMSD4_20260816_151002` | `D2STGNN_PEMSD8_20260816_150942` |
+| Mamba4Traffic | `Mamba4Traffic_PEMSD4_20260816_151054` | `Mamba4Traffic_PEMSD8_20260816_151048` |
+| Trafformer | `Trafformer_PEMSD4_20260921_064833` | `Trafformer_PEMSD8_20260817_104712` |
 
-### Sparsity (masked inference)
-
-```bash
-python eval_sparsity.py --model_dir libcity/cache/DCRNN_PEMSD8_20260630_094749 \
-  --sparsity 0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0 \
-  --mask_seed 43
-
-python tools/sparsity/build_results_cache.py
-python scripts/generate_sparsity_paper_figures.py --lineage multiseed_new
-```
-
-## Model naming
-
-See `MODEL_MAP.md` for LibCity keys vs paper display names (`MCSTMambaLST_Ablation` → Mamba4Traffic).
-
-## M4T ablation retrain
-
-```bash
-python run_model.py --task traffic_state_pred --model MCSTMambaLST_Ablation \
-  --dataset PEMSD8 --config_file configs/m4t/MCSTMambaLST_NoLSTM --train true
-```
-
-## Validation
-
-See `VALIDATION.md` for the reproduction checklist. Manuscript update notes: `MANUSCRIPT_HANDOFF.md`.
+`Mamba4Traffic` is the canonical public key. `MCSTMambaLST_Ablation` remains only for older-checkpoint compatibility. This fork derives from [LibCity](https://github.com/LibCity/Bigscity-LibCity).

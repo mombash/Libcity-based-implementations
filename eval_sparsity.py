@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-MCSTMambaLST_Ablation sparsity evaluation for PEMSD8.
+Sparsity evaluation for LibCity traffic-state checkpoints (PEMSD4 / PEMSD8).
 
 This script supports two modes for evaluating model robustness to sensor sparsity:
 
@@ -36,8 +36,8 @@ At each sparsity level/scheme, this script computes:
 - Channel-averaged vehicular metrics (vMAE_a, vRMSE_a, vMAPE_a)
 
 Vehicular metrics follow the Traffic Mamba (Mamba4Traffic) paper:
-- Targets are z-scored per channel using training-set mean/std (by default)
-- Metrics are computed on the normalized scale, by default at the last horizon.
+- Targets are z-scored per channel using training-set mean/std (default --vehicular_norm train)
+- Metrics are averaged over all forecast horizons (default --vehicular_scope all).
 """
 
 import argparse
@@ -52,6 +52,7 @@ from tqdm import tqdm
 import itertools
 import re
 from datetime import datetime
+from pathlib import Path
 
 import matplotlib
 matplotlib.use("Agg")
@@ -141,6 +142,45 @@ if ROOT_DIR not in sys.path:
 from libcity.config import ConfigParser
 from libcity.data import get_dataset
 from libcity.utils import get_model
+
+
+def channel_csv_names(data_col, output_dim=3):
+    """Map data_col entries to CSV suffixes (flow / occupancy / speed)."""
+    defaults = ["flow", "occupancy", "speed"]
+    names = []
+    for i in range(output_dim):
+        if data_col is not None and i < len(data_col):
+            raw = str(data_col[i]).replace("traffic_", "")
+            names.append(raw if raw else defaults[i if i < len(defaults) else 0])
+        else:
+            names.append(defaults[i] if i < len(defaults) else f"ch{i}")
+    return names
+
+
+def scaler_channel_stats(scaler, output_dim):
+    """Return (mu, std) of length output_dim, repeating a scalar stats vector."""
+    if scaler is None or type(scaler).__name__ == "NoneScaler":
+        return None, None
+    sc_mu = getattr(scaler, "mean", None)
+    if sc_mu is None:
+        sc_mu = getattr(scaler, "mean_", None)
+    sc_std = getattr(scaler, "std", None)
+    if sc_std is None:
+        sc_std = getattr(scaler, "std_", None)
+    if sc_mu is None or sc_std is None:
+        return None, None
+    mu = np.asarray(sc_mu, dtype=np.float64).reshape(-1)
+    sd = np.asarray(sc_std, dtype=np.float64).reshape(-1)
+    if mu.size == 1:
+        mu = np.repeat(mu, output_dim)
+    if sd.size == 1:
+        sd = np.repeat(sd, output_dim)
+    if mu.size < output_dim or sd.size < output_dim:
+        return None, None
+    mu = mu[:output_dim]
+    sd = np.where(sd[:output_dim] < 1e-8, 1e-8, sd[:output_dim])
+    return mu.astype(np.float32), sd.astype(np.float32)
+
 
 def plot_example_timeseries(
     horizons,
@@ -838,17 +878,29 @@ def _best_val_epoch_from_log(log_path):
 
 def resolve_checkpoint_path(*, model_cache_dir, log_path, explicit_checkpoint=None):
     """
-    Resolve a checkpoint .tar for sparsity eval.
+    Resolve the released best checkpoint for sparsity evaluation.
 
-    Default policy: use the epoch with minimum validation loss recorded in the
-    training log (matches LibCity ``load_best_epoch`` training behavior).
-    Falls back to the latest saved epoch only when the log cannot be parsed.
+    The compact release contains one ``.m`` file per run. Tensor-for-tensor
+    validation confirms that each file is the best-validation epoch used by the
+    submitted evaluations. Development runs with epoch tarballs retain the
+    original best-validation selection behavior.
     """
     if explicit_checkpoint is not None:
         return os.path.abspath(explicit_checkpoint), {
             "checkpoint_selection": "explicit",
             "best_val_epoch": None,
             "best_val_loss": None,
+        }
+
+    released_models = sorted(Path(model_cache_dir).glob("*.m"))
+    if released_models:
+        if len(released_models) != 1:
+            raise RuntimeError(f"Expected one released .m checkpoint in {model_cache_dir}")
+        best_epoch, best_val = _best_val_epoch_from_log(log_path)
+        return str(released_models[0].resolve()), {
+            "checkpoint_selection": "released_best",
+            "best_val_epoch": best_epoch,
+            "best_val_loss": best_val,
         }
 
     epoch_tar = _collect_epoch_checkpoints(model_cache_dir)
@@ -915,7 +967,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--checkpoint", default=None,
-        help="Optional explicit checkpoint path. If not set, best validation-loss epoch from the training log is used."
+        help="Optional explicit checkpoint path. If not set, use the released .m file or the best validation-loss epoch."
     )
     parser.add_argument(
         "--model_dir", required=True,
@@ -949,31 +1001,41 @@ def main():
         help="Output CSV path. If not set, saved under the run directory in ./sparcity_cache."
     )
     parser.add_argument(
-        "--mask_seed", type=int, default=42,
+        "--mask_seed", type=int, default=43,
         help="Deterministic seed base for selecting masked sensors per sparsity."
     )
     parser.add_argument(
         "--mask_zero_mode",
         choices=["normalized", "inverse"],
-        default="normalized",
+        default="inverse",
         help=(
             "How to set masked inputs for the first output_dim channels: "
-            "'normalized' writes the normalized value that corresponds to raw zero (default); "
-            "'inverse' performs inverse->zero->re-scale to achieve raw-zero semantics."
+            "'inverse' inverse-scales, writes raw 0, then re-scales (paper protocol); "
+            "'normalized' writes −μ/σ in z-space."
         ),
     )
     parser.add_argument(
-        "--vehicular_norm", choices=["evaluator", "train", "test"], default="evaluator",
-        help="Z-score baseline: 'evaluator' (dataset scaler stats), 'train' (paper-style), or 'test' (on-slice)."
+        "--fill_mode",
+        choices=["zero", "last_observation", "training_mean"],
+        default="zero",
+        help=(
+            "Replacement for selected sensor histories. 'zero' is the reported paper "
+            "protocol; 'last_observation' broadcasts the latest clean input value; "
+            "'training_mean' uses the per-channel training-split mean."
+        ),
     )
     parser.add_argument(
-        "--vehicular_scope", choices=["last", "all"], default="last",
-        help="Horizon scope for vehicular metrics: 'last' (paper) or 'all'."
+        "--vehicular_norm", choices=["evaluator", "train", "test"], default="train",
+        help="Z-score baseline: 'train' (training-set channel stats), 'evaluator' (test GT+pred), or 'test' (on-slice).",
+    )
+    parser.add_argument(
+        "--vehicular_scope", choices=["last", "all"], default="all",
+        help="Horizon scope for vehicular metrics: 'all' (every horizon) or 'last'.",
     )
     parser.add_argument(
         "--permute_channels",
         choices=["auto", "none", "pred", "gt"],
-        default="auto",
+        default="none",
         help=(
             "Resolve possible channel order mismatch for DCRNN checkpoints. "
             "'pred': permute predictions to dataset/scaler order. "
@@ -985,7 +1047,7 @@ def main():
     parser.add_argument(
         "--permute_inputs",
         choices=["auto", "none"],
-        default="auto",
+        default="none",
         help=(
             "For DCRNN, try permuting ONLY the first output_dim feature channels of input X to match the "
             "checkpoint's expected training order. Auto evaluates all 6 perms on the first batch."
@@ -1047,6 +1109,13 @@ def main():
     parser.add_argument(
         "--no_save_series_csvs", action="store_true",
         help="Disable per-sensor CSV export."
+    )
+    parser.add_argument(
+        "--no_save_predictions", action="store_true",
+        help=(
+            "Do not write the raw predictions/ground-truth NPZ archive. All aggregate, "
+            "per-channel, and per-horizon metrics remain in sparsity_results.csv."
+        ),
     )
     parser.add_argument(
         "--save_series_dir", default=None,
@@ -1176,7 +1245,7 @@ def main():
     print(f"Outputs will be saved to: {run_dir}")
     print(f"Log file: {log_file_path}")
 
-    # Resolve checkpoint if not provided (best val epoch, not latest saved epoch).
+    # Resolve the released best checkpoint (or best-val epoch in a development run).
     model_cache_dir = os.path.join(args.model_dir, "model_cache")
     if not os.path.isdir(model_cache_dir):
         raise RuntimeError(f"model_cache directory not found: {model_cache_dir}")
@@ -1186,9 +1255,14 @@ def main():
         log_path=log_path,
         explicit_checkpoint=args.checkpoint,
     )
-    if ckpt_meta.get("checkpoint_selection") == "best_val":
+    if (
+        ckpt_meta.get("checkpoint_selection") in {"best_val", "released_best"}
+        and ckpt_meta.get("best_val_epoch") is not None
+        and ckpt_meta.get("best_val_loss") is not None
+    ):
         print(
-            f"Using best-val checkpoint: epoch {ckpt_meta['best_val_epoch']} "
+            f"Using {ckpt_meta['checkpoint_selection']} checkpoint: "
+            f"epoch {ckpt_meta['best_val_epoch']} "
             f"(val_loss={ckpt_meta['best_val_loss']:.4f})"
         )
     print(f"Using checkpoint: {ckpt_path}")
@@ -1209,6 +1283,7 @@ def main():
         "sparsity_mode": args.sparsity_mode,
         "mask_seed": args.mask_seed,
         "mask_zero_mode": args.mask_zero_mode,
+        "fill_mode": args.fill_mode,
         "batch_size": args.batch_size,
         "device": args.device,
         "visualize_topology": args.visualize_topology,
@@ -1295,6 +1370,11 @@ def main():
     num_nodes = data_feature.get("num_nodes")
     feature_dim = data_feature.get("feature_dim")
     output_dim = data_feature.get("output_dim")
+    data_col = log_config_overrides.get("data_col") if log_config_overrides else None
+    if data_col is None:
+        data_col = overrides.get("data_col")
+    csv_ch = channel_csv_names(data_col, output_dim if output_dim else 3)
+    print(f"CSV channel names (index order): {csv_ch}")
 
     # Fast path: compute metrics directly from saved predictions (sanity-check mode)
     if args.eval_from_npz is not None:
@@ -1465,8 +1545,8 @@ def main():
 
     mu_train = None
     std_train = None
-    if args.vehicular_norm == "train":
-        print("\nComputing training-set channel stats for vehicular metrics ...")
+    if args.vehicular_norm == "train" or args.fill_mode == "training_mean":
+        print("\nComputing training-set channel stats for vehicular metrics/fill ...")
         mu_train, std_train = compute_train_channel_stats(
             train_loader, output_dim, scaler=scaler, feature_dim=feature_dim
         )
@@ -1692,55 +1772,49 @@ def main():
             if masked_idx.size > 0:
                 X_masked = X_np.copy()
                 x_first = X_masked[..., :output_dim]
-                if args.mask_zero_mode == "inverse":
-                    # Previous implementation: inverse -> zero in raw units -> re-normalize
+                mu_sc, sd_sc = scaler_channel_stats(scaler, output_dim)
+                if args.fill_mode == "last_observation":
+                    # Explicit future-work switch: use only the latest clean input,
+                    # never a target or future value, and broadcast it over the
+                    # selected sensor history.
+                    latest = x_first[:, -1:, masked_idx, :].copy()
+                    x_first[:, :, masked_idx, :] = latest
+                    X_masked[..., :output_dim] = x_first
+                elif args.fill_mode == "training_mean":
+                    if mu_train is None:
+                        raise RuntimeError("training_mean fill requires training-split channel statistics")
+                    fill = np.asarray(mu_train[:output_dim], dtype=np.float32)
+                    if mu_sc is not None:
+                        fill = (fill - mu_sc) / sd_sc
+                    x_first[:, :, masked_idx, :] = fill.reshape(1, 1, 1, -1)
+                    X_masked[..., :output_dim] = x_first
+                elif args.mask_zero_mode == "inverse":
                     if scaler is not None and type(scaler).__name__ != "NoneScaler":
-                        x_first_inv = scaler.inverse_transform(torch.from_numpy(x_first)).numpy()
+                        try:
+                            x_first_inv = scaler.inverse_transform(torch.from_numpy(x_first)).numpy()
+                        except Exception:
+                            if mu_sc is not None:
+                                x_first_inv = x_first * sd_sc.reshape(1, 1, 1, -1) + mu_sc.reshape(1, 1, 1, -1)
+                            else:
+                                x_first_inv = x_first
                     else:
                         x_first_inv = x_first
-                    # zero in original units
                     x_first_inv[:, :, masked_idx, :] = 0.0
-                    # re-apply normalization
                     if scaler is not None and type(scaler).__name__ != "NoneScaler":
                         try:
                             x_first_norm = scaler.transform(torch.from_numpy(x_first_inv)).numpy()
                         except Exception:
-                            sc_mu = getattr(scaler, "mean", None) or getattr(scaler, "mean_", None)
-                            sc_std = getattr(scaler, "std", None) or getattr(scaler, "std_", None)
-                            if sc_mu is not None and sc_std is not None:
-                                mu = np.asarray(sc_mu).reshape(-1)[:output_dim]
-                                sd = np.asarray(sc_std).reshape(-1)[:output_dim]
-                                sd = np.where(sd < 1e-8, 1e-8, sd)
-                                x_first_norm = (x_first_inv - mu) / sd
+                            if mu_sc is not None:
+                                x_first_norm = (x_first_inv - mu_sc.reshape(1, 1, 1, -1)) / sd_sc.reshape(1, 1, 1, -1)
                             else:
                                 x_first_norm = x_first_inv
                     else:
                         x_first_norm = x_first_inv
                     X_masked[..., :output_dim] = x_first_norm
                 else:
-                    # Default: write the normalized value that corresponds to raw zero
-                    # Compute per-channel normalized zero for the first output_dim channels
                     normalized_zero = np.zeros((output_dim,), dtype=np.float32)
-                    if scaler is not None and type(scaler).__name__ != "NoneScaler":
-                        sc_mu = getattr(scaler, "mean", None) or getattr(scaler, "mean_", None)
-                        sc_std = getattr(scaler, "std", None) or getattr(scaler, "std_", None)
-                        if sc_mu is not None and sc_std is not None:
-                            mu = np.asarray(sc_mu).reshape(-1)
-                            sd = np.asarray(sc_std).reshape(-1)
-                            if mu.size >= output_dim and sd.size >= output_dim:
-                                sd_use = np.where(sd[:output_dim] < 1e-8, 1e-8, sd[:output_dim])
-                                normalized_zero = (-mu[:output_dim] / sd_use).astype(np.float32)
-                        else:
-                            sc_min = getattr(scaler, "min", None) or getattr(scaler, "min_", None)
-                            sc_max = getattr(scaler, "max", None) or getattr(scaler, "max_", None)
-                            if sc_min is not None and sc_max is not None:
-                                mn = np.asarray(sc_min).reshape(-1)
-                                mx = np.asarray(sc_max).reshape(-1)
-                                if mn.size >= output_dim and mx.size >= output_dim:
-                                    denom = mx[:output_dim] - mn[:output_dim]
-                                    denom = np.where(denom < 1e-8, 1e-8, denom)
-                                    normalized_zero = (-(mn[:output_dim]) / denom).astype(np.float32)
-                    # Assign normalized zero across all timesteps for masked nodes
+                    if mu_sc is not None:
+                        normalized_zero = (-mu_sc / sd_sc).astype(np.float32)
                     x_first[:, :, masked_idx, :] = normalized_zero.reshape(1, 1, 1, -1)
                     X_masked[..., :output_dim] = x_first
             else:
@@ -1932,8 +2006,6 @@ def main():
                 b_pred_mean = preds_np.mean(axis=(0, 1, 2))
                 b_gt_mean = gts_np.mean(axis=(0, 1, 2))
                 # Only print occasionally to avoid spam
-                # print(f"  [DCRNN debug:first-batch] GT mean   {np.array2string(b_gt_mean, precision=4)}")
-                # print(f"  [DCRNN debug:first-batch] Pred mean {np.array2string(b_pred_mean, precision=4)}")
 
             preds_all.append(preds_np)
             gts_all.append(gts_np)
@@ -1943,14 +2015,15 @@ def main():
         print(f"  preds shape: {preds_all.shape}, gts shape: {gts_all.shape}")
         
         # Store predictions for .npz export
-        predictions_storage[iter_key] = {
-            'predictions': preds_all.copy(),
-            'ground_truth': gts_all.copy(),
-            'scheme_name': scheme_name if args.sparsity_mode == "scheme" else None,
-            'rho': rho,
-            'masked_nodes': list(masked_idx),
-            'group_name': group_name if args.sparsity_mode == "scheme" else None,
-        }
+        if not args.no_save_predictions:
+            predictions_storage[iter_key] = {
+                'predictions': preds_all.copy(),
+                'ground_truth': gts_all.copy(),
+                'scheme_name': scheme_name if args.sparsity_mode == "scheme" else None,
+                'rho': rho,
+                'masked_nodes': list(masked_idx),
+                'group_name': group_name if args.sparsity_mode == "scheme" else None,
+            }
 
         # Optional per-channel stats and errors (after inverse scaling already applied above)
         if args.debug_per_channel and preds_all.shape[-1] == 3:
@@ -2122,10 +2195,7 @@ def main():
             mu_vec=mu_vec, std_vec=std_vec
         )
 
-        # Align vehicular averages to evaluator-style normalized metrics (reported alongside per-channel)
-        vMAE_a = mz_mae
-        vRMSE_a = mz_rmse
-        vMAPE_a = mz_mape
+        # Keep vehicular averages from compute_vehicular_metrics (do not overwrite with masked zMAE).
 
         # Group metrics (if sparsity_stats_npz provided)
         extra = {}
@@ -2256,8 +2326,7 @@ def main():
         print(f"  Per-horizon vMAE: {np.array2string(vMAE_per_horizon, precision=4)}")
 
         # Store results
-        # Channel indices are assumed to be [flow, occupancy, speed].
-        # Per-channel MAE in original units (averaged over batches, horizons, nodes)
+        # Channel CSV names follow data_col (flow / occupancy / speed after FOS lock).
         mae_per_channel = np.mean(np.abs(preds_all - gts_all), axis=(0, 1, 2))
         row = {
             "sparsity": rho,
@@ -2273,21 +2342,21 @@ def main():
             "MAE_last": mae_last,
             "RMSE_last": rmse_last,
 
-            "MAE_flow":       float(mae_per_channel[0]),
-            "MAE_occupancy":  float(mae_per_channel[1]),
-            "MAE_speed":      float(mae_per_channel[2]),
+            f"MAE_{csv_ch[0]}":       float(mae_per_channel[0]),
+            f"MAE_{csv_ch[1]}":       float(mae_per_channel[1]),
+            f"MAE_{csv_ch[2]}":       float(mae_per_channel[2]),
 
-            "vMAE_flow":       float(vMAE_c[0]),
-            "vMAE_occupancy":  float(vMAE_c[1]),
-            "vMAE_speed":      float(vMAE_c[2]),
+            f"vMAE_{csv_ch[0]}":       float(vMAE_c[0]),
+            f"vMAE_{csv_ch[1]}":       float(vMAE_c[1]),
+            f"vMAE_{csv_ch[2]}":       float(vMAE_c[2]),
 
-            "vRMSE_flow":      float(vRMSE_c[0]),
-            "vRMSE_occupancy": float(vRMSE_c[1]),
-            "vRMSE_speed":     float(vRMSE_c[2]),
+            f"vRMSE_{csv_ch[0]}":      float(vRMSE_c[0]),
+            f"vRMSE_{csv_ch[1]}":      float(vRMSE_c[1]),
+            f"vRMSE_{csv_ch[2]}":      float(vRMSE_c[2]),
 
-            "vMAPE_flow":      float(vMAPE_c[0]),
-            "vMAPE_occupancy": float(vMAPE_c[1]),
-            "vMAPE_speed":     float(vMAPE_c[2]),
+            f"vMAPE_{csv_ch[0]}":      float(vMAPE_c[0]),
+            f"vMAPE_{csv_ch[1]}":      float(vMAPE_c[1]),
+            f"vMAPE_{csv_ch[2]}":      float(vMAPE_c[2]),
 
             "vMAE_a": vMAE_a,
             "vRMSE_a": vRMSE_a,

@@ -10,6 +10,9 @@ __pycache__/
 
 # Large artifact dirs / local Zenodo unpack (not in git)
 artifacts/expected_layout/
+artifacts/paper-release/
+sparsity-traffic-forecasting-artifacts.tar.gz
+reproduced/
 # keep docs under artifacts/; ignore only the layout unpack dir contents if present
 zenodo-bundle/
 sparcity_cache

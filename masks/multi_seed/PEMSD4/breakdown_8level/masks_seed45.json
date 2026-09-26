@@ -3,11 +3,9 @@
     "dataset": "PEMSD4",
     "num_nodes": 307,
     "mask_seed": 45,
-    "baseline_seed": 42,
     "sparsity_grid": "breakdown_8level",
     "sparsity_levels": [
-      0.0,
-      0.05,
+      0.0,      0.05,
       0.1,
       0.15,
       0.2,
@@ -16,11 +14,10 @@
       0.35
     ],
     "sparsity_mode": "sweep",
-    "notes": "Additional random masks for repeated-mask robustness analysis (reviewer R2 comment 5)."
+    "notes": "Deterministic masks for the reported three-seed analysis."
   },
   "masks_by_rho": {
-    "0.00": [],
-    "0.05": [
+    "0.00": [],    "0.05": [
       19,
       71,
       72,

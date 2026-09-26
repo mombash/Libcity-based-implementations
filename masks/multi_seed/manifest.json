@@ -18,6 +18,5 @@
     44,
     45
   ],
-  "existing_seed": 42,
   "usage": "Re-run eval_sparsity.py with --mask_seed <seed> for each file's meta.mask_seed. Mask node lists match eval_sparsity.masked_nodes_for_rho."
 }

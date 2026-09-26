@@ -1,51 +1,23 @@
-# Model Name Mapping
+# Paper model and checkpoint map
 
-LibCity `--model` keys vs paper display names for the Sparsity and Mamba4Traffic journal papers.
+The sparsity benchmark uses the same public names in code, tables, figures, and caches.
 
-## Sparsity Journal Paper (4-model benchmark)
+| LibCity key | Paper name |
+|---|---|
+| `DCRNN` | DCRNN |
+| `D2STGNN` | D2STGNN |
+| `Mamba4Traffic` | Mamba4Traffic |
+| `Trafformer` | Trafformer |
 
-| LibCity key | Paper display name | Notes |
-|-------------|-------------------|-------|
-| `DCRNN` | DCRNN | |
-| `D2STGNN` | D2STGNN | Channel order remapped in table scripts |
-| `Trafformer` | Trafformer | |
-| `MCSTMambaLST_Ablation` | Mamba4Traffic | Same implementation as M4T paper |
+The legacy `MCSTMambaLST_Ablation` key is retained only so older checkpoints can still be loaded. New paper commands and cache paths use `Mamba4Traffic`.
 
-Figure code may alias `MCSTMambaLST_Ablation` as `MCSTMambaLST` internally.
+## Standardized checkpoint lineage
 
-## Mamba4Traffic Journal Paper
+| Model | PEMS04 run | PEMS08 run |
+|---|---|---|
+| DCRNN | `DCRNN_PEMSD4_20260831_114637` | `DCRNN_PEMSD8_20260831_071603` |
+| D2STGNN | `D2STGNN_PEMSD4_20260816_151002` | `D2STGNN_PEMSD8_20260816_150942` |
+| Mamba4Traffic | `Mamba4Traffic_PEMSD4_20260816_151054` | `Mamba4Traffic_PEMSD8_20260816_151048` |
+| Trafformer | `Trafformer_PEMSD4_20260921_064833` | `Trafformer_PEMSD8_20260817_104712` |
 
-| LibCity key | Paper display name | Notes |
-|-------------|-------------------|-------|
-| `MCSTMambaLST_Ablation` | Mamba4Traffic | Full model (all ablation flags false) |
-| `MCSTMambaLST` | Mamba4Traffic (architecture) | FiLM + LSTM variant |
-| `MCSTMamba` | MCST-Mamba | Conference predecessor |
-| `GWNET` | GWNet | |
-| `MTGNN` | MTGNN | |
-| `STGCN` | STGCN | |
-| `D2STGNN` | D2STGNN | |
-| `GMAN` | GMAN | |
-| `DCRNN` | DCRNN | |
-| `GTS` | GTS | |
-| STAEformer | STAEformer | External CSV benchmarks only (not in this repo) |
-
-## Ablation variants (M4T Tab. ablation, PEMSD8)
-
-| LibCity key | Disabled component |
-|-------------|-------------------|
-| `MCSTMambaLST_NoEmbeddings` | Embeddings |
-| `MCSTMambaLST_NoLSTM` | LSTM branch |
-| `MCSTMambaLST_NoMTemporal` | Mamba temporal path |
-| `MCSTMambaLST_NoMamba` | Mamba blocks |
-| `MCSTMambaLST_NoTemporal` | Temporal pathway |
-
-## Checkpoint lineages
-
-Two lineages coexist; do not mix them in eval scripts.
-
-| Lineage | Used for | Example run dir |
-|---------|----------|-----------------|
-| `sparsity_multiseed` | Sparsity paper (mask seeds 43–45; Jun 23–30 2026 retrains) | `DCRNN_PEMSD4_20260630_094809` |
-| `m4t_sept2025` | M4T paper full-data benchmark | `_baselines/` CSVs; sparse `.m` weights |
-
-See `artifacts/MANIFEST.json` and `artifacts/RETRAIN_TODO.md` for on-disk availability.
+These are the default `standard` profile in `tools/sparsity/job_plan.py`. The manuscript uses the Trafformer/PEMS04 checkpoint with sample stride 1. The separately labeled channel-breakdown cache contains three dedicated Trafformer/PEMS04 operational-grid evaluations used solely to reproduce the six public companion plots.

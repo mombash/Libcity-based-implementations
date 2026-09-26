@@ -13,6 +13,13 @@
   "distil": false,
   "mix": true,
   "d_layers": 1,
+  "data_col": [
+    "traffic_flow",
+    "traffic_occupancy",
+    "traffic_speed"
+  ],
   "batch_size": 3,
-  "use_sliding_window": false
+  "use_sliding_window": true,
+  "scaler": "standard",
+  "sample_stride": 1
 }

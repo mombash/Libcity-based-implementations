@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import os
 import shlex
 from dataclasses import dataclass
 from pathlib import Path
@@ -9,62 +11,52 @@ from typing import Any, Iterator
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
-# Retrained / kept paper runs with checkpoints under libcity/cache/.
-MODELS: dict[str, dict[str, str]] = {
+# Final standardized-input checkpoints used by the manuscript.
+STANDARD_MODELS: dict[str, dict[str, str]] = {
     "DCRNN": {
-        "PEMSD4": "libcity/cache/DCRNN_PEMSD4_20260630_094809",
-        "PEMSD8": "libcity/cache/DCRNN_PEMSD8_20260630_094749",
+        "PEMSD4": "libcity/cache/DCRNN_PEMSD4_20260831_114637",
+        "PEMSD8": "libcity/cache/DCRNN_PEMSD8_20260831_071603",
     },
     "D2STGNN": {
-        "PEMSD4": "libcity/cache/D2STGNN_PEMSD4_20260623_102537",
-        "PEMSD8": "libcity/cache/D2STGNN_PEMSD8_20251202_210455",
+        "PEMSD4": "libcity/cache/D2STGNN_PEMSD4_20260816_151002",
+        "PEMSD8": "libcity/cache/D2STGNN_PEMSD8_20260816_150942",
     },
-    "MCSTMambaLST_Ablation": {
-        "PEMSD4": "libcity/cache/MCSTMambaLST_Ablation_PEMSD4_20260629_174146",
-        "PEMSD8": "libcity/cache/MCSTMambaLST_Ablation_PEMSD8_20260630_094729",
+    "Mamba4Traffic": {
+        "PEMSD4": "libcity/cache/Mamba4Traffic_PEMSD4_20260816_151054",
+        "PEMSD8": "libcity/cache/Mamba4Traffic_PEMSD8_20260816_151048",
     },
     "Trafformer": {
-        "PEMSD4": "libcity/cache/Trafformer_PEMSD4_20260624_071738",
-        "PEMSD8": "libcity/cache/Trafformer_PEMSD8_20260629_060448",
+        "PEMSD4": "libcity/cache/Trafformer_PEMSD4_20260921_064833",
+        "PEMSD8": "libcity/cache/Trafformer_PEMSD8_20260817_104712",
     },
 }
 
-TRAINING_LOG_FILES: dict[tuple[str, str], str] = {
-    ("DCRNN", "PEMSD4"): (
-        "libcity/cache/DCRNN_PEMSD4_20260630_094809/logs/"
-        "DCRNN_PEMSD4_20260630_094809-DCRNN-PEMSD4-Jun-30-2026_09-48-09.log"
-    ),
-    ("DCRNN", "PEMSD8"): (
-        "libcity/cache/DCRNN_PEMSD8_20260630_094749/logs/"
-        "DCRNN_PEMSD8_20260630_094749-DCRNN-PEMSD8-Jun-30-2026_09-47-49.log"
-    ),
-    ("D2STGNN", "PEMSD4"): (
-        "libcity/cache/D2STGNN_PEMSD4_20260623_102537/logs/"
-        "D2STGNN_PEMSD4_20260623_102537-D2STGNN-PEMSD4-Jun-23-2026_10-25-37.log"
-    ),
-    ("D2STGNN", "PEMSD8"): (
-        "libcity/cache/D2STGNN_PEMSD8_20251202_210455/logs/"
-        "D2STGNN_PEMSD8_20251202_210455-D2STGNN-PEMSD8-Dec-02-2025_21-04-55.log"
-    ),
-    ("MCSTMambaLST_Ablation", "PEMSD4"): (
-        "libcity/cache/MCSTMambaLST_Ablation_PEMSD4_20260629_174146/logs/"
-        "MCSTMambaLST_Ablation_PEMSD4_20260629_174146-"
-        "MCSTMambaLST_Ablation-PEMSD4-Jun-29-2026_17-41-46.log"
-    ),
-    ("MCSTMambaLST_Ablation", "PEMSD8"): (
-        "libcity/cache/MCSTMambaLST_Ablation_PEMSD8_20260630_094729/logs/"
-        "MCSTMambaLST_Ablation_PEMSD8_20260630_094729-"
-        "MCSTMambaLST_Ablation-PEMSD8-Jun-30-2026_09-47-29.log"
-    ),
-    ("Trafformer", "PEMSD4"): (
-        "libcity/cache/Trafformer_PEMSD4_20260624_071738/logs/"
-        "Trafformer_PEMSD4_20260624_071738-Trafformer-PEMSD4-Jun-24-2026_07-17-38.log"
-    ),
-    ("Trafformer", "PEMSD8"): (
-        "libcity/cache/Trafformer_PEMSD8_20260629_060448/logs/"
-        "Trafformer_PEMSD8_20260629_060448-Trafformer-PEMSD8-Jun-29-2026_06-04-48.log"
-    ),
+STANDARD_TRAINING_LOG_FILES: dict[tuple[str, str], str] = {
+    ("DCRNN", "PEMSD4"): "libcity/cache/DCRNN_PEMSD4_20260831_114637/logs/DCRNN_PEMSD4_20260831_114637-DCRNN-PEMSD4-Aug-31-2026_11-46-37.log",
+    ("DCRNN", "PEMSD8"): "libcity/cache/DCRNN_PEMSD8_20260831_071603/logs/DCRNN_PEMSD8_20260831_071603-DCRNN-PEMSD8-Aug-31-2026_07-16-03.log",
+    ("D2STGNN", "PEMSD4"): "libcity/cache/D2STGNN_PEMSD4_20260816_151002/logs/D2STGNN_PEMSD4_20260816_151002-D2STGNN-PEMSD4-Aug-16-2026_15-10-02.log",
+    ("D2STGNN", "PEMSD8"): "libcity/cache/D2STGNN_PEMSD8_20260816_150942/logs/D2STGNN_PEMSD8_20260816_150942-D2STGNN-PEMSD8-Aug-16-2026_15-09-42.log",
+    ("Mamba4Traffic", "PEMSD4"): "libcity/cache/Mamba4Traffic_PEMSD4_20260816_151054/logs/Mamba4Traffic_PEMSD4_20260816_151054-Mamba4Traffic-PEMSD4-Aug-16-2026_15-10-54.log",
+    ("Mamba4Traffic", "PEMSD8"): "libcity/cache/Mamba4Traffic_PEMSD8_20260816_151048/logs/Mamba4Traffic_PEMSD8_20260816_151048-Mamba4Traffic-PEMSD8-Aug-16-2026_15-10-48.log",
+    ("Trafformer", "PEMSD4"): "libcity/cache/Trafformer_PEMSD4_20260921_064833/logs/Trafformer_PEMSD4_20260921_064833-Trafformer-PEMSD4-Sep-21-2026_06-48-33.log",
+    ("Trafformer", "PEMSD8"): "libcity/cache/Trafformer_PEMSD8_20260817_104712/logs/Trafformer_PEMSD8_20260817_104712-Trafformer-PEMSD8-Aug-17-2026_10-47-12.log",
 }
+
+CHECKPOINT_PROFILE = os.environ.get("SPARSITY_CHECKPOINT_PROFILE", "standard").strip().lower()
+if CHECKPOINT_PROFILE == "standard":
+    MODELS = STANDARD_MODELS
+    TRAINING_LOG_FILES = STANDARD_TRAINING_LOG_FILES
+elif CHECKPOINT_PROFILE == "raw":
+    raw_map = os.environ.get("SPARSITY_RAW_CHECKPOINT_MAP")
+    if not raw_map:
+        raise ValueError("raw profile requires SPARSITY_RAW_CHECKPOINT_MAP; no raw IDs are published")
+    payload = json.loads(Path(raw_map).read_text())
+    MODELS = payload["models"]
+    TRAINING_LOG_FILES = {
+        tuple(key.split("|", 1)): value for key, value in payload["training_logs"].items()
+    }
+else:
+    raise ValueError("SPARSITY_CHECKPOINT_PROFILE must be 'standard' or 'raw'")
 
 PAPER_LABEL = "paper"
 BREAKDOWN_LABEL = "breakdown"
@@ -85,7 +77,7 @@ SMOKE_LABEL = "smoke"
 EVAL_BATCH_SIZE: dict[tuple[str, str], int] = {
     ("Trafformer", "PEMSD4"): 1,
     ("Trafformer", "PEMSD8"): 4,
-    ("MCSTMambaLST_Ablation", "PEMSD4"): 64,
+    ("Mamba4Traffic", "PEMSD4"): 64,
 }
 
 
@@ -133,8 +125,8 @@ def training_complete_reason(model: str, dataset: str) -> str | None:
         return f"missing run dir {MODELS[model][dataset]}"
 
     model_cache = run_dir / "model_cache"
-    if not model_cache.is_dir() or not any(model_cache.glob("*.tar")):
-        return "no checkpoints in model_cache"
+    if not model_cache.is_dir() or not (any(model_cache.glob("*.tar")) or any(model_cache.glob("*.m"))):
+        return "no checkpoint in model_cache"
 
     summary = run_dir / "logs" / "training_summary.txt"
     if not summary.is_file():

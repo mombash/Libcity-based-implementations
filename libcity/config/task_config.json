@@ -141,6 +141,7 @@
             "MCSTMamba",
             "MCSTMambaLST",
             "MCSTMambaLST_Ablation",
+            "Mamba4Traffic",
             "MegaCRN",
             "MSTGCN",
             "MSTGCNCommon",
@@ -609,6 +610,11 @@
             "evaluator": "TrafficStateEvaluator"
         },
         "MCSTMambaLST_Ablation": {
+            "dataset_class": "TrafficStatePointDataset",
+            "executor": "TrafficStateExecutor",
+            "evaluator": "TrafficStateEvaluator"
+        },
+        "Mamba4Traffic": {
             "dataset_class": "TrafficStatePointDataset",
             "executor": "TrafficStateExecutor",
             "evaluator": "TrafficStateEvaluator"
