@@ -261,7 +261,7 @@ class Mamba4Traffic(AbstractTrafficStateModel):
             ablation_info.append("noEmbAdaptive")
 
         ablation_str = f" (Ablations: {', '.join(ablation_info)})" if ablation_info else " (Full model)"
-        self._logger.info(f"MCSTMamba ablation model configured for device: {self.device}{ablation_str}")
+        self._logger.info(f"Mamba4Traffic model configured for device: {self.device}{ablation_str}")
 
         # Move model to device
         self.to(self.device)

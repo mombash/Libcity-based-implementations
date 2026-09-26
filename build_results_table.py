@@ -7,7 +7,6 @@ Table columns: Model, Metric, PEMS04_Flow, PEMS04_Occupancy, PEMS04_Speed, PEMS0
                PEMS08_Flow, PEMS08_Occupancy, PEMS08_Speed, PEMS08_Average
 Metrics: vMAE, vRMSE, MAPE (raw, as percentage)
 Channel order: Flow (ch0), Occupancy (ch1), Speed (ch2)
-Mamba4Traffic = MCSTMambaLST_Ablation
 STAEformer from STAEformer/PEMS04_benchmarks and STAEformer/PEMS08_benchmarks (CSVs outside normalized folders for raw MAPE; normalized folders for vMAE/vRMSE)
 """
 import csv
@@ -31,11 +30,6 @@ MODELS_ORDER = [
     "STAEformer",
     "Mamba4Traffic",
 ]
-
-# LibCity folder name -> paper name
-BASELINE_TO_PAPER = {
-    "MCSTMambaLST_Ablation": "Mamba4Traffic",
-}
 
 
 def get_libcity_row(path: Path, row_index: int) -> Optional[dict]:
@@ -143,12 +137,12 @@ def fmt(x) -> str:
 
 
 def main():
-    # Collect LibCity baselines (excluding MCSTMambaLST for PEMS08 if missing Raw channel_1/2; we use MCSTMambaLST_Ablation as Mamba4Traffic)
-    libcity_models = ["GWNET", "MTGNN", "STGCN", "D2STGNN", "GMAN", "DCRNN", "GTS", "MCSTMambaLST_Ablation"]
+    # Collect LibCity baselines using canonical public model names
+    libcity_models = ["GWNET", "MTGNN", "STGCN", "D2STGNN", "GMAN", "DCRNN", "GTS", "Mamba4Traffic"]
     results = {}  # paper_name -> { "PEMS04": {...}, "PEMS08": {...} }
     # Dataset folder names in _baselines are PEMSD4 and PEMSD8; we output as PEMS04, PEMS08
     for model in libcity_models:
-        paper_name = BASELINE_TO_PAPER.get(model, model)
+        paper_name = model
         results[paper_name] = {"PEMS04": {}, "PEMS08": {}}
         for folder_name, out_key in [("PEMSD4", "PEMS04"), ("PEMSD8", "PEMS08")]:
             folder = BASELINES_ROOT / folder_name / model

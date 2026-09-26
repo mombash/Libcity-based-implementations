@@ -9,7 +9,6 @@ The sparsity benchmark uses the same public names in code, tables, figures, and 
 | `Mamba4Traffic` | Mamba4Traffic |
 | `Trafformer` | Trafformer |
 
-The legacy `MCSTMambaLST_Ablation` key is retained only so older checkpoints can still be loaded. New paper commands and cache paths use `Mamba4Traffic`.
 
 ## Standardized checkpoint lineage
 

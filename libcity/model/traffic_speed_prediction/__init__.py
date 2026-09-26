@@ -8,7 +8,6 @@ from libcity.model.traffic_speed_prediction.D2STGNN import D2STGNN
 from libcity.model.traffic_speed_prediction.Trafformer import Trafformer
 from libcity.model.traffic_speed_prediction.MCSTMamba import MCSTMamba
 from libcity.model.traffic_speed_prediction.MCSTMambaLST import MCSTMambaLST
-from libcity.model.traffic_speed_prediction.MCSTMambaLST_Ablation import MCSTMambaLST_Ablation
 from libcity.model.traffic_speed_prediction.Mamba4Traffic import Mamba4Traffic
 
 __all__ = [
@@ -22,6 +21,5 @@ __all__ = [
     "Trafformer",
     "MCSTMamba",
     "MCSTMambaLST",
-    "MCSTMambaLST_Ablation",
     "Mamba4Traffic",
 ]

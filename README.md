@@ -71,4 +71,4 @@ These switches are extensions; no results for them are reported. Spatially corre
 | Mamba4Traffic | `Mamba4Traffic_PEMSD4_20260816_151054` | `Mamba4Traffic_PEMSD8_20260816_151048` |
 | Trafformer | `Trafformer_PEMSD4_20260921_064833` | `Trafformer_PEMSD8_20260817_104712` |
 
-`Mamba4Traffic` is the canonical public key. `MCSTMambaLST_Ablation` remains only for older-checkpoint compatibility. This fork derives from [LibCity](https://github.com/LibCity/Bigscity-LibCity).
+`Mamba4Traffic` is the canonical public key. See [Mamba4Traffic under the unified protocol](docs/mamba4traffic.md) for training, checkpoint evaluation, and future artifact organization. This fork derives from [LibCity](https://github.com/LibCity/Bigscity-LibCity).
